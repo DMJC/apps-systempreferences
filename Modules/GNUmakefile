@@ -3,6 +3,7 @@ RPM_DISABLE_RELOCATABLE=YES
 include $(GNUSTEP_MAKEFILES)/common.make
 
 SUBPROJECTS = \
+	Audio \
         TimeZone \
         Volumes \
         FileSystem \

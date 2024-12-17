@@ -1,3 +1,7 @@
+2024-12-18  James Carthew <jcarthew@gmail.com>
+
+        * Added Modules/Audio: PulseAudio Volume Control Module
+
 2024-06-02  Richard frith-Macdonald <rfm@gnu.org>
 
         * GNUmakefile: update version for release 1.2.1
