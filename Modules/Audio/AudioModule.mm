@@ -38,8 +38,8 @@
     tabView.tabViewType = NSTopTabsBezelBorder;
 
     // Add tabs
-    NSTabViewItem *audioTab = [[NSTabViewItem alloc] initWithIdentifier:@"Audio"];
-    [audioTab setLabel:@"Audio"];
+    NSTabViewItem *audioTab = [[NSTabViewItem alloc] initWithIdentifier:@"Sound Effects"];
+    [audioTab setLabel:@"Sound Effects"];
 
     // Create a view for the General tab
     NSView *generalView = [[NSView alloc] initWithFrame:tabView.bounds];
@@ -47,7 +47,7 @@
 
     // Add a label to the General tab
     NSTextField *label = [[NSTextField alloc] initWithFrame:NSMakeRect(20, generalView.bounds.size.height - 50, 300, 20)];
-    label.stringValue = @"Settings for the General tab:";
+    label.stringValue = @"Select an Alert Sound:";
     label.editable = NO;
     label.bezeled = NO;
     label.drawsBackground = NO;
@@ -67,6 +67,17 @@
     // Add the tabView to the mainView
     [self.mainView addSubview:tabView];
 
+
+
+
+    NSTextField *output_top_label = [[NSTextField alloc] initWithFrame:NSMakeRect(20, generalView.bounds.size.height - 50, 300, 20)];
+    output_top_label.stringValue = @"Select a device for Sound Output:";
+    output_top_label.editable = NO;
+    output_top_label.bezeled = NO;
+    output_top_label.drawsBackground = NO;
+    output_top_label.alignment = NSTextAlignmentLeft;
+    output_top_label.font = [NSFont systemFontOfSize:13.0];
+    [outputView addSubview:output_top_label];
     // Device Table View
     NSScrollView *outputScrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(10, 80, width - 20, 220)];
     self.outputDeviceTableView = [[NSTableView alloc] initWithFrame:NSZeroRect];
@@ -115,6 +126,14 @@
     [inputTab setView:inputView];
     [tabView addTabViewItem:inputTab];
 
+    NSTextField *input_top_label = [[NSTextField alloc] initWithFrame:NSMakeRect(20, generalView.bounds.size.height - 50, 300, 20)];
+    input_top_label.stringValue = @"Select a device for Sound I:";
+    input_top_label.editable = NO;
+    input_top_label.bezeled = NO;
+    input_top_label.drawsBackground = NO;
+    input_top_label.alignment = NSTextAlignmentLeft;
+    input_top_label.font = [NSFont systemFontOfSize:13.0];
+    [inputView addSubview:input_top_label];
     // Device Table View
     NSScrollView *inputScrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(10, 80, width - 20, 220)];
     self.inputDeviceTableView = [[NSTableView alloc] initWithFrame:NSZeroRect];
