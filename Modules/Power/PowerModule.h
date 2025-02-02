@@ -6,6 +6,7 @@
     NSSlider *sleepSlider;
     NSTextField *sliderLabel;
     NSTextField *sliderValuesLabel;
+    NSButton *privilegeEscalationCheckbox;
     NSButton *preventSleepCheckbox;
     NSButton *putDisksToSleepCheckbox;
     NSButton *wakeForNetworkCheckbox;
