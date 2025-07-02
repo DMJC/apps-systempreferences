@@ -4,6 +4,9 @@ include $(GNUSTEP_MAKEFILES)/common.make
 
 SUBPROJECTS = \
 	Audio \
+	Video \
+	Network \
+	Power \
         TimeZone \
         Volumes \
         FileSystem \
