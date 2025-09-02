@@ -7,6 +7,7 @@ extern "C" {
 #include <unordered_map>
 #include <memory>
 #include <sstream>
+#include <cstdio>
 
 class X11Backend : public DisplayBackend {
   Display* dpy_{nullptr};
@@ -16,12 +17,17 @@ class X11Backend : public DisplayBackend {
   std::unordered_map<std::string, Orig> originals_;
 public:
   X11Backend() {
+    std::fprintf(stderr, "[X11Backend] init\n");
     dpy_ = XOpenDisplay(nullptr);
     if (dpy_) { screen_ = DefaultScreen(dpy_); root_ = RootWindow(dpy_, screen_); }
   }
-  ~X11Backend() override { if (dpy_) XCloseDisplay(dpy_); }
+  ~X11Backend() override {
+    std::fprintf(stderr, "[X11Backend] destroy\n");
+    if (dpy_) XCloseDisplay(dpy_);
+  }
 
   std::vector<OutputInfo> listOutputs() override {
+    std::fprintf(stderr, "[X11Backend] listOutputs\n");
     std::vector<OutputInfo> out;
     if (!dpy_) return out;
     XRRScreenResources* res = XRRGetScreenResourcesCurrent(dpy_, root_);
@@ -61,6 +67,7 @@ public:
   }
 
   bool setMode(const std::string& name, const std::string& modeId) override {
+    std::fprintf(stderr, "[X11Backend] setMode %s -> %s\n", name.c_str(), modeId.c_str());
     if (!dpy_) return false;
     XRRScreenResources* res = XRRGetScreenResourcesCurrent(dpy_, root_);
     if (!res) return false;
@@ -90,6 +97,7 @@ public:
   }
 
   bool revert(const std::string& name) override {
+    std::fprintf(stderr, "[X11Backend] revert %s\n", name.c_str());
     if (!dpy_) return false;
     auto it = originals_.find(name);
     if (it == originals_.end()) return false;
@@ -105,5 +113,6 @@ public:
 
 // factory
 std::unique_ptr<DisplayBackend> MakeX11Backend() {
+  std::fprintf(stderr, "[Factory] MakeX11Backend\n");
   return std::unique_ptr<DisplayBackend>(new X11Backend());
 }

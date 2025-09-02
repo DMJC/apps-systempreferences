@@ -237,6 +237,7 @@ static inline NSString* modeString(const XRRModeInfo& mi) {
 #pragma mark - RandR
 
 - (void)openDisplayAndLoad {
+  NSLog(@"VideoModule: openDisplayAndLoad using X11 backend");
   _dpy = XOpenDisplay(nullptr);
   if (!_dpy) { NSBeep(); return; }
   _screen = DefaultScreen(_dpy);
@@ -288,6 +289,7 @@ static inline NSString* modeString(const XRRModeInfo& mi) {
 }
 
 - (BOOL)applyMode:(RRMode)newMode forIndex:(NSInteger)idx {
+  NSLog(@"VideoModule: applyMode index %ld mode %llu", (long)idx, (unsigned long long)newMode);
   if (idx < 0 || idx >= (NSInteger)_outputs.size()) return NO;
   auto &e = _outputs[(size_t)idx];
 
@@ -330,11 +332,19 @@ static inline NSString* modeString(const XRRModeInfo& mi) {
 }
 
 - (IBAction)onApply:(id)sender {
-  for (auto &e : _outputs) {
+  NSLog(@"VideoModule: onApply");
+  for (size_t i = 0; i < _outputs.size(); ++i) {
+    auto &e = _outputs[i];
     if (e.pendingMode != 0 && e.pendingMode != e.originalMode) {
-      e.originalMode = e.pendingMode;
-      CrtcInfoPtr ci(XRRGetCrtcInfo(_dpy, _res.get(), e.crtc));
-      if (ci) { e.originalX = ci->x; e.originalY = ci->y; e.originalRotation = ci->rotation; }
+      if ([self applyMode:e.pendingMode forIndex:(NSInteger)i]) {
+        e.originalMode = e.pendingMode;
+        CrtcInfoPtr ci(XRRGetCrtcInfo(_dpy, _res.get(), e.crtc));
+        if (ci) {
+          e.originalX = ci->x;
+          e.originalY = ci->y;
+          e.originalRotation = ci->rotation;
+        }
+      }
       e.pendingMode = 0;
     }
   }
@@ -405,15 +415,9 @@ static inline NSString* modeString(const XRRModeInfo& mi) {
     if (row < 0 || row >= (NSInteger)e.modes.size()) return;
 
     RRMode mid = e.modes[(size_t)row].id;
-    if ([self applyMode:mid forIndex:_selectedOutputRow]) {
-      e.pendingMode = mid;
-      [self startRevertTimer];
-      [self.outputDeviceTableView reloadData];
-      [self.inputDeviceTableView reloadData];
-    } else {
-      NSBeep();
-      [tv deselectRow:row];
-    }
+    e.pendingMode = mid;
+    [self.outputDeviceTableView reloadData];
+    [self.inputDeviceTableView reloadData];
   }
 }
 
