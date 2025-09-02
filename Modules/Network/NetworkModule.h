@@ -9,5 +9,11 @@
 @property (strong) NSArray *connectionTypes;
 @property (strong) NSButton *addButton;
 @property (strong) NSButton *removeButton;
+@property (strong) NSTextField *statusField;
+@property (strong) NSTextField *ipField;
+@property (strong) NSTextField *maskField;
+@property (strong) NSTextField *routerField;
+@property (strong) NSTextField *dnsField;
+@property (strong) NSTextField *searchField;
 @end
 #endif //NETWORKMODULE_H
