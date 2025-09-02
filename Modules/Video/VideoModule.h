@@ -1,13 +1,25 @@
-#ifndef VIDEOMODULE_H
-#define VIDEOMODULE_H
+// VideoModule.h
+// GNUstep / SystemPreferences module for managing display resolutions with RandR
 
-#import <Cocoa/Cocoa.h>
+#import <AppKit/AppKit.h>
 #import "PreferencePanes.h"
+NS_ASSUME_NONNULL_BEGIN
 
-@interface VideoModule : NSPreferencePane <NSTableViewDelegate, NSTableViewDataSource>
-@property (strong) NSTableView *deviceTableView;
-@property (strong) NSTableView *inputDeviceTableView;
-@property (strong) NSTableView *outputDeviceTableView;
-@property (nonatomic, strong) NSButton *ApplyButton;
+@interface VideoModule : NSPreferencePane <NSTableViewDataSource, NSTableViewDelegate>
+
+// Outlets – wire them up in Gorm/Nib, or programmatically create in mainViewDidLoad
+@property (nonatomic, strong) IBOutlet NSTableView *deviceTableView;       // List of connected outputs
+@property (nonatomic, strong) IBOutlet NSTableView *outputDeviceTableView; // Modes for selected output
+@property (nonatomic, strong) IBOutlet NSTableView *scaleTableView;	   // Scale Table
+@property (nonatomic, strong) IBOutlet NSTableView *inputDeviceTableView;  // Details table
+@property (nonatomic, strong) IBOutlet NSButton    *ApplyButton;           // Apply button
+@property (nonatomic, strong) IBOutlet NSScrollView *scaleScrollView;
+// SystemPreferences entry point
+- (void)mainViewDidLoad;
+
+// Actions
+- (IBAction)onApply:(id)sender;
+
 @end
-#endif //VIDEOMODULE_H
+
+NS_ASSUME_NONNULL_END
