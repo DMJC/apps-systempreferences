@@ -5,15 +5,15 @@
 #import "PreferencePanes.h"
 
 @interface NetworkModule : NSPreferencePane <NSTableViewDelegate, NSTableViewDataSource>
-@property (strong) NSTableView *connectionListView;
-@property (strong) NSArray *connectionTypes;
-@property (strong) NSButton *addButton;
-@property (strong) NSButton *removeButton;
-@property (strong) NSTextField *statusField;
-@property (strong) NSTextField *ipField;
-@property (strong) NSTextField *maskField;
-@property (strong) NSTextField *routerField;
-@property (strong) NSTextField *dnsField;
-@property (strong) NSTextField *searchField;
+@property (retain) NSTableView *connectionListView;
+@property (retain) NSArray *connectionTypes;
+@property (retain) NSButton *addButton;
+@property (retain) NSButton *removeButton;
+@property (retain) NSTextField *statusField;
+@property (retain) NSTextField *ipField;
+@property (retain) NSTextField *maskField;
+@property (retain) NSTextField *routerField;
+@property (retain) NSTextField *dnsField;
+@property (retain) NSTextField *searchField;
 @end
 #endif //NETWORKMODULE_H

@@ -1,8 +1,20 @@
 #import "NetworkModule.h"
 
+static const CGFloat kConnectionRowHeight = 40.0;
+
 @implementation NetworkModule
 
 - (void)dealloc {
+    [_connectionListView release];
+    [_connectionTypes release];
+    [_addButton release];
+    [_removeButton release];
+    [_statusField release];
+    [_ipField release];
+    [_maskField release];
+    [_routerField release];
+    [_dnsField release];
+    [_searchField release];
     [super dealloc];
 }
 
@@ -15,6 +27,7 @@
 
 - (NSArray *)fetchConnectionTypes {
     NSMutableSet *types = [NSMutableSet set];
+    NSMutableSet *activeTypes = [NSMutableSet set];
     @try {
         NSTask *task = [[NSTask alloc] init];
         [task setLaunchPath:@"/usr/bin/env"];
@@ -30,6 +43,22 @@
         for (NSString *line in lines) {
             if ([line length] > 0) {
                 [types addObject:line];
+            }
+        }
+
+        NSTask *activeTask = [[NSTask alloc] init];
+        [activeTask setLaunchPath:@"/usr/bin/env"];
+        [activeTask setArguments:@[@"nmcli", @"-t", @"-f", @"TYPE", @"connection", @"show", @"--active"]];
+        NSPipe *activePipe = [NSPipe pipe];
+        [activeTask setStandardOutput:activePipe];
+        [activeTask launch];
+        [activeTask waitUntilExit];
+        NSData *aData = [[activePipe fileHandleForReading] readDataToEndOfFile];
+        NSString *aOutput = [[NSString alloc] initWithData:aData encoding:NSUTF8StringEncoding];
+        NSArray *aLines = [aOutput componentsSeparatedByString:@"\n"];
+        for (NSString *line in aLines) {
+            if ([line length] > 0) {
+                [activeTypes addObject:line];
             }
         }
     }
@@ -51,9 +80,20 @@
             NSString *path = [[NSBundle bundleForClass:[self class]] pathForResource:@"Network" ofType:@"tiff"];
             icon = [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
         }
-        [result addObject:@{ @"name": type, @"icon": icon }];
+        BOOL connected = [activeTypes containsObject:type];
+        [result addObject:@{ @"name": type, @"icon": icon, @"connected": @(connected) }];
     }
     return result;
+}
+
+- (void)reloadConnectionList {
+    self.connectionTypes = [self fetchConnectionTypes];
+    NSInteger rowCount = [self.connectionTypes count];
+    CGFloat tableHeight = kConnectionRowHeight * rowCount;
+    if (tableHeight < 300)
+        tableHeight = 300;
+    [self.connectionListView setFrame:NSMakeRect(0, 0, 160, tableHeight)];
+    [self.connectionListView reloadData];
 }
 
 - (NSImage *)iconForConnectionType:(NSString *)type {
@@ -68,6 +108,27 @@
 
     NSString *path = [[NSBundle bundleForClass:[self class]] pathForResource:iconName ofType:@"tiff"];
     return [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
+}
+
+- (NSImage *)dotImageForState:(BOOL)connected {
+    static NSImage *greenDot = nil;
+    static NSImage *redDot = nil;
+    if (!greenDot) {
+        NSImage *g = [[[NSImage alloc] initWithSize:NSMakeSize(8, 8)] autorelease];
+        [g lockFocus];
+        [[NSColor greenColor] set];
+        [[NSBezierPath bezierPathWithOvalInRect:NSMakeRect(0, 0, 8, 8)] fill];
+        [g unlockFocus];
+        greenDot = [g retain];
+
+        NSImage *r = [[[NSImage alloc] initWithSize:NSMakeSize(8, 8)] autorelease];
+        [r lockFocus];
+        [[NSColor redColor] set];
+        [[NSBezierPath bezierPathWithOvalInRect:NSMakeRect(0, 0, 8, 8)] fill];
+        [r unlockFocus];
+        redDot = [r retain];
+    }
+    return connected ? greenDot : redDot;
 }
 
 - (NSString *)maskFromPrefix:(NSInteger)prefix {
@@ -171,45 +232,45 @@
     NSView *contentView = [self mainView];
     self.mainView.frame = NSMakeRect(0, 0, 400, 360);
 
-    self.connectionTypes = [self fetchConnectionTypes];
-
-    NSScrollView *scrollView = [[[NSScrollView alloc] initWithFrame:NSMakeRect(20, 40, 100, 300)] autorelease];
-    NSTableView *tableView = [[[NSTableView alloc] initWithFrame:NSMakeRect(0, 0, 100, 300)] autorelease];
+    NSScrollView *scrollView = [[[NSScrollView alloc] initWithFrame:NSMakeRect(20, 40, 160, 300)] autorelease];
+    NSTableView *tableView = [[[NSTableView alloc] initWithFrame:NSMakeRect(0, 0, 160, 300)] autorelease];
+    [tableView setRowHeight:kConnectionRowHeight];
     NSTableColumn *column = [[[NSTableColumn alloc] initWithIdentifier:@"TypeColumn"] autorelease];
-    [column setWidth:100];
+    [column setWidth:160];
     [tableView addTableColumn:column];
     [tableView setHeaderView:nil];
     tableView.delegate = self;
     tableView.dataSource = self;
     self.connectionListView = tableView;
-    scrollView.documentView = tableView;
+    [scrollView setDocumentView:tableView];
     [scrollView setHasVerticalScroller:YES];
     [contentView addSubview:scrollView];
+    [self reloadConnectionList];
 
     self.addButton = [[[NSButton alloc] initWithFrame:NSMakeRect(20, 10, 20, 20)] autorelease];
     [self.addButton setTitle:@"+"];
-    [self.addButton setBezelStyle:NSBezelStyleTexturedSquare];
     [self.addButton setTarget:self];
     [self.addButton setAction:@selector(addConnection:)];
     [contentView addSubview:self.addButton];
 
     self.removeButton = [[[NSButton alloc] initWithFrame:NSMakeRect(60, 10, 20, 20)] autorelease];
     [self.removeButton setTitle:@"-"];
-    [self.removeButton setBezelStyle:NSBezelStyleTexturedSquare];
     [self.removeButton setTarget:self];
     [self.removeButton setAction:@selector(removeConnection:)];
     [contentView addSubview:self.removeButton];
 
-    CGFloat labelX = 140.0;
-    CGFloat valueX = 240.0;
-    CGFloat startY = 320.0;
+    CGFloat labelX = 200.0;
+    CGFloat valueX = 300.0;
+    CGFloat startY = 350.0;
 
     NSTextField *(^makeLabel)(NSString *, CGFloat) = ^NSTextField *(NSString *text, CGFloat y) {
         NSTextField *label = [[[NSTextField alloc] initWithFrame:NSMakeRect(labelX, y, 100, 20)] autorelease];
+        [label setBezeled:NO];
+        [label setDrawsBackground:NO];
+        [label setEditable:NO];
+        [label setSelectable:NO];
         [label setStringValue:text];
         [label setBordered:NO];
-        [label setEditable:NO];
-        [label setBackgroundColor:[NSColor clearColor]];
         [contentView addSubview:label];
         return label;
     };
@@ -217,27 +278,34 @@
     NSTextField *(^makeValueField)(CGFloat) = ^NSTextField *(CGFloat y) {
         NSTextField *field = [[[NSTextField alloc] initWithFrame:NSMakeRect(valueX, y, 140, 20)] autorelease];
         [field setEditable:NO];
+        [field setBezeled:NO];
+        [field setDrawsBackground:NO];
+        [field setSelectable:NO];
+        [field setBordered:NO];
+
         [contentView addSubview:field];
         return field;
     };
 
-    makeLabel(@"Status:", startY);
-    self.statusField = makeValueField(startY);
+    makeLabel(@"Status:", startY - 30);
+    self.statusField = makeValueField(startY - 30);
 
-    makeLabel(@"IP Address:", startY - 30);
-    self.ipField = makeValueField(startY - 30);
+    makeLabel(@"Configure IPv4:", startY - 60);
 
-    makeLabel(@"Subnet Mask:", startY - 60);
-    self.maskField = makeValueField(startY - 60);
+    makeLabel(@"IP Address:", startY - 90);
+    self.ipField = makeValueField(startY - 90);
 
-    makeLabel(@"Router:", startY - 90);
-    self.routerField = makeValueField(startY - 90);
+    makeLabel(@"Subnet Mask:", startY - 120);
+    self.maskField = makeValueField(startY - 120);
 
-    makeLabel(@"DNS Server:", startY - 120);
-    self.dnsField = makeValueField(startY - 120);
+    makeLabel(@"Router:", startY - 150);
+    self.routerField = makeValueField(startY - 150);
 
-    makeLabel(@"Search Domains:", startY - 150);
-    self.searchField = makeValueField(startY - 150);
+    makeLabel(@"DNS Server:", startY - 180);
+    self.dnsField = makeValueField(startY - 180);
+
+    makeLabel(@"Search Domains:", startY - 210);
+    self.searchField = makeValueField(startY - 210);
 }
 
 #pragma mark - Actions
@@ -259,26 +327,52 @@
     return [self.connectionTypes count];
 }
 
+- (CGFloat)tableView:(NSTableView *)tableView heightOfRow:(NSInteger)row {
+    return kConnectionRowHeight;
+}
+
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row {
     NSDictionary *info = [self.connectionTypes objectAtIndex:row];
     NSTableCellView *cell = [tableView makeViewWithIdentifier:@"Cell" owner:self];
     if (!cell) {
-        cell = [[[NSTableCellView alloc] initWithFrame:NSMakeRect(0, 0, 100, 20)] autorelease];
+        CGFloat width = [tableColumn width];
+        cell = [[[NSTableCellView alloc] initWithFrame:NSMakeRect(0, 0, width, kConnectionRowHeight)] autorelease];
         cell.identifier = @"Cell";
-        NSImageView *imageView = [[[NSImageView alloc] initWithFrame:NSMakeRect(0, 0, 20, 20)] autorelease];
+
+        NSImageView *imageView = [[[NSImageView alloc] initWithFrame:NSMakeRect(2, 8, 24, 24)] autorelease];
         [imageView setImageScaling:NSImageScaleProportionallyDown];
         [cell addSubview:imageView];
-        NSTextField *textField = [[[NSTextField alloc] initWithFrame:NSMakeRect(24, 0, 76, 20)] autorelease];
-        [textField setBordered:NO];
-        [textField setEditable:NO];
-        [textField setBackgroundColor:[NSColor clearColor]];
-        [cell addSubview:textField];
+
+        NSTextField *nameField = [[[NSTextField alloc] initWithFrame:NSMakeRect(32, 22, width - 34, 16)] autorelease];
+        [nameField setBezeled:NO];
+        [nameField setBordered:NO];
+        [nameField setEditable:NO];
+        [nameField setDrawsBackground:NO];
+        [cell addSubview:nameField];
+
+        NSImageView *dotView = [[[NSImageView alloc] initWithFrame:NSMakeRect(32, 6, 8, 8)] autorelease];
+        dotView.tag = 100;
+        [cell addSubview:dotView];
+
+        NSTextField *statusField = [[[NSTextField alloc] initWithFrame:NSMakeRect(44, 2, width - 46, 16)] autorelease];
+        [statusField setBordered:NO];
+        [statusField setBezeled:NO];
+        [statusField setEditable:NO];
+        [statusField setBackgroundColor:[NSColor clearColor]];
+        statusField.tag = 101;
+        [cell addSubview:statusField];
+
         cell.imageView = imageView;
-        cell.textField = textField;
+        cell.textField = nameField;
     }
 
     cell.imageView.image = [info objectForKey:@"icon"];
     cell.textField.stringValue = [info objectForKey:@"name"];
+    BOOL connected = [[info objectForKey:@"connected"] boolValue];
+    NSImageView *dotView = [cell viewWithTag:100];
+    dotView.image = [self dotImageForState:connected];
+    NSTextField *statusField = [cell viewWithTag:101];
+    statusField.stringValue = connected ? @"Connected" : @"Disconnected";
     return cell;
 }
 
