@@ -79,7 +79,7 @@
     output_top_label.font = [NSFont systemFontOfSize:13.0];
     [outputView addSubview:output_top_label];
     // Device Table View
-    NSScrollView *outputScrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(10, 80, width - 20, 220)];
+    NSScrollView *outputScrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(40, 80, width - 70, 150)];
     self.outputDeviceTableView = [[NSTableView alloc] initWithFrame:NSZeroRect];
     [self.outputDeviceTableView setDelegate:self];
     [self.outputDeviceTableView setDataSource:self];
@@ -127,7 +127,7 @@
     [tabView addTabViewItem:inputTab];
 
     NSTextField *input_top_label = [[NSTextField alloc] initWithFrame:NSMakeRect(20, generalView.bounds.size.height - 50, 300, 20)];
-    input_top_label.stringValue = @"Select a device for Sound I:";
+    input_top_label.stringValue = @"Select a device for Sound Input:";
     input_top_label.editable = NO;
     input_top_label.bezeled = NO;
     input_top_label.drawsBackground = NO;
@@ -135,7 +135,7 @@
     input_top_label.font = [NSFont systemFontOfSize:13.0];
     [inputView addSubview:input_top_label];
     // Device Table View
-    NSScrollView *inputScrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(10, 80, width - 20, 220)];
+    NSScrollView *inputScrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(40, 80, width - 70, 150)];
     self.inputDeviceTableView = [[NSTableView alloc] initWithFrame:NSZeroRect];
     [self.inputDeviceTableView setDelegate:self];
     [self.inputDeviceTableView setDataSource:self];

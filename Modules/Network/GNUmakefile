@@ -14,9 +14,11 @@ NetworkModule_OBJCC_FILES = NetworkModule.mm
 
 NetworkModule_PRINCIPAL_CLASS = NetworkModule
 
-NetworkModule_RESOURCE_FILES = \
-Network.tiff \
-Resources/English.lproj
+NetworkModule_RESOURCE_FILES = Network.tiff \
+  Ethernet.tiff \
+  Bluetooth.tiff \
+  Wifi.tiff \
+  Resources/English.lproj
 
 NetworkModule_LANGUAGES = \
 Resources/English

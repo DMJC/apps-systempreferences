@@ -15,6 +15,7 @@ static const CGFloat kConnectionRowHeight = 40.0;
     [_routerField release];
     [_dnsField release];
     [_searchField release];
+    [_methodPopup release];
     [super dealloc];
 }
 
@@ -68,7 +69,7 @@ static const CGFloat kConnectionRowHeight = 40.0;
 
     if ([types count] == 0) {
         [types addObjectsFromArray:@[@"ethernet", @"wifi", @"bond", @"ip-tunnel",
-                                     @"macsec", @"team", @"vlan", @"wireguard",
+                                     @"macsec", @"team", @"loopback", @"wifi-p2p", @"vlan", @"wireguard",
                                      @"bridge", @"bluetooth", @"dsl", @"infiniband",
                                      @"gsm", @"vpn"]];
     }
@@ -81,6 +82,7 @@ static const CGFloat kConnectionRowHeight = 40.0;
             icon = [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
         }
         BOOL connected = [activeTypes containsObject:type];
+	NSLog(@"%@", type);
         [result addObject:@{ @"name": type, @"icon": icon, @"connected": @(connected) }];
     }
     return result;
@@ -102,6 +104,10 @@ static const CGFloat kConnectionRowHeight = 40.0;
         iconName = @"Ethernet";
     } else if ([type caseInsensitiveCompare:@"bluetooth"] == NSOrderedSame) {
         iconName = @"bluetooth";
+    } else if ([type caseInsensitiveCompare:@"wifi"] == NSOrderedSame) {
+	iconName = @"wireless";
+    } else if ([type caseInsensitiveCompare:@"wireless"] == NSOrderedSame) {
+	iconName = @"wireless";
     } else {
         iconName = @"Network";
     }
@@ -215,6 +221,34 @@ static const CGFloat kConnectionRowHeight = 40.0;
                 }
             }
             [info setObject:(connected ? @"Connected" : @"Disconnected") forKey:@"status"];
+
+            NSTask *methodTask = [[NSTask alloc] init];
+            [methodTask setLaunchPath:@"/usr/bin/env"];
+            [methodTask setArguments:@[@"nmcli", @"-t", @"-f",
+                                       @"DEVICE,IP4.METHOD,IP4.ADDRESS",
+                                       @"connection", @"show", @"--active"]];
+            NSPipe *mpipe = [NSPipe pipe];
+            [methodTask setStandardOutput:mpipe];
+            [methodTask launch];
+            [methodTask waitUntilExit];
+            NSData *mdata = [[mpipe fileHandleForReading] readDataToEndOfFile];
+            NSString *mout = [[[NSString alloc] initWithData:mdata encoding:NSUTF8StringEncoding] autorelease];
+            NSArray *mlines = [mout componentsSeparatedByString:@"\n"];
+            for (NSString *ml in mlines) {
+                NSArray *mparts = [ml componentsSeparatedByString:@":"];
+                if ([mparts count] >= 2 && [[mparts objectAtIndex:0] isEqualToString:device]) {
+                    NSString *method = [mparts objectAtIndex:1];
+                    NSString *addr = ([mparts count] > 2) ? [mparts objectAtIndex:2] : @"";
+                    if ([method isEqualToString:@"manual"]) {
+                        [info setObject:@"manual" forKey:@"method"];
+                    } else if ([addr length] > 0) {
+                        [info setObject:@"auto-manual" forKey:@"method"];
+                    } else {
+                        [info setObject:@"auto" forKey:@"method"];
+                    }
+                    break;
+                }
+            }
         } else {
             [info setObject:@"Disconnected" forKey:@"status"];
         }
@@ -291,6 +325,11 @@ static const CGFloat kConnectionRowHeight = 40.0;
     self.statusField = makeValueField(startY - 30);
 
     makeLabel(@"Configure IPv4:", startY - 60);
+    self.methodPopup = [[[NSPopUpButton alloc] initWithFrame:NSMakeRect(valueX, startY - 60, 140, 26)] autorelease];
+    [self.methodPopup addItemsWithTitles:@[@"Manually", @"Using DHCP", @"Using DHCP with manual address"]];
+    [self.methodPopup setTarget:self];
+    [self.methodPopup setAction:@selector(methodChanged:)];
+    [contentView addSubview:self.methodPopup];
 
     makeLabel(@"IP Address:", startY - 90);
     self.ipField = makeValueField(startY - 90);
@@ -306,6 +345,29 @@ static const CGFloat kConnectionRowHeight = 40.0;
 
     makeLabel(@"Search Domains:", startY - 210);
     self.searchField = makeValueField(startY - 210);
+    [self updateFieldEditability];
+
+    makeLabel(@"Router:", startY - 240);
+    self.routerField = makeValueField(startY - 240);
+
+}
+
+#pragma mark - Editing
+
+- (void)updateFieldEditability {
+    BOOL manual = ([self.methodPopup indexOfSelectedItem] == 0);
+    NSArray *fields = @[ self.ipField, self.maskField, self.routerField, self.dnsField, self.searchField ];
+    for (NSTextField *field in fields) {
+        [field setEditable:manual];
+        [field setBezeled:manual];
+        [field setSelectable:manual];
+        [field setBordered:manual];
+        [field setDrawsBackground:manual];
+    }
+}
+
+- (void)methodChanged:(id)sender {
+    [self updateFieldEditability];
 }
 
 #pragma mark - Actions
@@ -333,46 +395,38 @@ static const CGFloat kConnectionRowHeight = 40.0;
 
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row {
     NSDictionary *info = [self.connectionTypes objectAtIndex:row];
-    NSTableCellView *cell = [tableView makeViewWithIdentifier:@"Cell" owner:self];
-    if (!cell) {
-        CGFloat width = [tableColumn width];
-        cell = [[[NSTableCellView alloc] initWithFrame:NSMakeRect(0, 0, width, kConnectionRowHeight)] autorelease];
-        cell.identifier = @"Cell";
+    CGFloat width = [tableColumn width];
 
-        NSImageView *imageView = [[[NSImageView alloc] initWithFrame:NSMakeRect(2, 8, 24, 24)] autorelease];
-        [imageView setImageScaling:NSImageScaleProportionallyDown];
-        [cell addSubview:imageView];
+    NSTableCellView *cell = [[[NSTableCellView alloc] initWithFrame:NSMakeRect(0, 0, width, kConnectionRowHeight)] autorelease];
 
-        NSTextField *nameField = [[[NSTextField alloc] initWithFrame:NSMakeRect(32, 22, width - 34, 16)] autorelease];
-        [nameField setBezeled:NO];
-        [nameField setBordered:NO];
-        [nameField setEditable:NO];
-        [nameField setDrawsBackground:NO];
-        [cell addSubview:nameField];
+    NSImageView *imageView = [[[NSImageView alloc] initWithFrame:NSMakeRect(2, 8, 24, 24)] autorelease];
+    [imageView setImageScaling:NSImageScaleProportionallyDown];
+    [imageView setImage:[info objectForKey:@"icon"]];
+    cell.imageView = imageView;
+    [cell addSubview:imageView];
 
-        NSImageView *dotView = [[[NSImageView alloc] initWithFrame:NSMakeRect(32, 6, 8, 8)] autorelease];
-        dotView.tag = 100;
-        [cell addSubview:dotView];
+    NSTextField *nameField = [[[NSTextField alloc] initWithFrame:NSMakeRect(32, 22, width - 34, 16)] autorelease];
+    [nameField setBezeled:NO];
+    [nameField setBordered:NO];
+    [nameField setEditable:NO];
+    [nameField setDrawsBackground:NO];
+    [nameField setStringValue:[info objectForKey:@"name"]];
+    cell.textField = nameField;
+    [cell addSubview:nameField];
 
-        NSTextField *statusField = [[[NSTextField alloc] initWithFrame:NSMakeRect(44, 2, width - 46, 16)] autorelease];
-        [statusField setBordered:NO];
-        [statusField setBezeled:NO];
-        [statusField setEditable:NO];
-        [statusField setBackgroundColor:[NSColor clearColor]];
-        statusField.tag = 101;
-        [cell addSubview:statusField];
-
-        cell.imageView = imageView;
-        cell.textField = nameField;
-    }
-
-    cell.imageView.image = [info objectForKey:@"icon"];
-    cell.textField.stringValue = [info objectForKey:@"name"];
     BOOL connected = [[info objectForKey:@"connected"] boolValue];
-    NSImageView *dotView = [cell viewWithTag:100];
-    dotView.image = [self dotImageForState:connected];
-    NSTextField *statusField = [cell viewWithTag:101];
-    statusField.stringValue = connected ? @"Connected" : @"Disconnected";
+    NSImageView *dotView = [[[NSImageView alloc] initWithFrame:NSMakeRect(32, 6, 8, 8)] autorelease];
+    [dotView setImage:[self dotImageForState:connected]];
+    [cell addSubview:dotView];
+
+    NSTextField *statusField = [[[NSTextField alloc] initWithFrame:NSMakeRect(44, 2, width - 46, 16)] autorelease];
+    [statusField setBordered:NO];
+    [statusField setBezeled:NO];
+    [statusField setEditable:NO];
+    [statusField setBackgroundColor:[NSColor clearColor]];
+    [statusField setStringValue:(connected ? @"Connected" : @"Disconnected")];
+    [cell addSubview:statusField];
+
     return cell;
 }
 
@@ -389,6 +443,7 @@ static const CGFloat kConnectionRowHeight = 40.0;
     self.routerField.stringValue = [details objectForKey:@"router"] ?: @"";
     self.dnsField.stringValue = [details objectForKey:@"dns"] ?: @"";
     self.searchField.stringValue = [details objectForKey:@"search"] ?: @"";
+
 }
 
 @end

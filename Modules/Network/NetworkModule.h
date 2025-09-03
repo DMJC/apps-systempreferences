@@ -15,5 +15,6 @@
 @property (retain) NSTextField *routerField;
 @property (retain) NSTextField *dnsField;
 @property (retain) NSTextField *searchField;
+@property (retain) NSPopUpButton *methodPopup;
 @end
 #endif //NETWORKMODULE_H
