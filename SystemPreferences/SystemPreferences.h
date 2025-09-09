@@ -30,6 +30,7 @@
 @class NSWindow;
 @class NSBox;
 @class SPIconsView;
+@class NSToolbarItem;
 
 @interface SystemPreferences : NSObject
 {
@@ -38,6 +39,7 @@
   IBOutlet NSWindow *win;
   IBOutlet NSBox *controlsBox;
   IBOutlet id showAllButt;
+  NSToolbarItem *showAllItem;
   IBOutlet NSBox *prefsBox;
   
   NSMutableArray *panes;
