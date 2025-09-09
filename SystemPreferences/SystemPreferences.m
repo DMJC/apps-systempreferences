@@ -47,11 +47,12 @@ static SystemPreferences *systemPreferences = nil;
 - (void)dealloc
 {
   [nc removeObserver: self];
-  
+
   RELEASE (window);
   RELEASE (panes);
   RELEASE (iconsView);
-    
+  RELEASE (showAllItem);
+
   [super dealloc];
 }
 
@@ -92,18 +93,44 @@ static SystemPreferences *systemPreferences = nil;
   if ([NSBundle loadNibNamed: nibName owner: self] == NO) {
     NSLog(@"failed to load %@!", nibName);
     [NSApp terminate: self];
-  } 
+  }
 
   window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 592, 414)
                                        styleMask: style
                                          backing: NSBackingStoreRetained
                                            defer: NO];
   [window setContentView: [win contentView]];
-  [window setTitle: [win title]]; 
+  [window setTitle: [win title]];
   [window setDelegate: self];
   DESTROY (win);
-    
-  [prefsBox setAutoresizesSubviews: NO];  
+
+  [controlsBox removeFromSuperview];
+
+  {
+    NSToolbar *toolbar;
+    NSSize s = [showAllButt frame].size;
+
+    toolbar = [[NSToolbar alloc] initWithIdentifier: @"SystemPreferencesToolbar"];
+    [toolbar setDelegate: self];
+    [toolbar setAllowsUserCustomization: NO];
+    [toolbar setAutosavesConfiguration: NO];
+
+    showAllItem = [[NSToolbarItem alloc] initWithItemIdentifier: @"ShowAllItem"];
+    [showAllItem setLabel: @"Show All"];
+    [showAllItem setPaletteLabel: @"Show All"];
+    [showAllButt removeFromSuperview];
+    [showAllItem setView: showAllButt];
+    [showAllItem setMinSize: s];
+    [showAllItem setMaxSize: s];
+    [showAllItem setTarget: self];
+    [showAllItem setAction: @selector(showAllButtAction:)];
+
+    [window setToolbar: toolbar];
+    [toolbar insertItemWithItemIdentifier: @"ShowAllItem" atIndex: 0];
+    RELEASE (toolbar);
+  }
+
+  [prefsBox setAutoresizesSubviews: NO];
   iconsView = [[SPIconsView alloc] initWithFrame: [[prefsBox contentView] frame]];
   [(NSBox *)prefsBox setContentView: iconsView];
 
@@ -118,10 +145,10 @@ static SystemPreferences *systemPreferences = nil;
   bundlesDir = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSSystemDomainMask, YES) lastObject];
   bundlesDir = [bundlesDir stringByAppendingPathComponent: @"Bundles"];
   [self addPanesFromDirectory: bundlesDir];
-  
+
   [panes sortUsingSelector: @selector(comparePane:)];
-  
-  [showAllButt setEnabled: NO];
+
+  [showAllItem setEnabled: NO];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification
@@ -252,10 +279,10 @@ static SystemPreferences *systemPreferences = nil;
   [currentPane willSelect];
   [(NSBox *)prefsBox setContentView: view];
   [currentPane didSelect];
-    
+
   [window setFrame: wr display: YES animate: YES];
-  
-  [showAllButt setEnabled: YES];
+
+  [showAllItem setEnabled: YES];
 }
 
 - (IBAction)showAllButtAction:(id)sender
@@ -291,7 +318,7 @@ static SystemPreferences *systemPreferences = nil;
     [window setFrame: wr display: YES animate: YES];
 
     currentPane = nil;
-    [showAllButt setEnabled: NO];
+    [showAllItem setEnabled: NO];
   }
 }
 
@@ -311,6 +338,27 @@ static SystemPreferences *systemPreferences = nil;
 - (void)updateDefaults
 {
   [window saveFrameUsingName: @"systemprefs"];
+}
+
+- (NSArray *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
+{
+  return [NSArray arrayWithObject: @"ShowAllItem"];
+}
+
+- (NSArray *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
+{
+  return [NSArray arrayWithObject: @"ShowAllItem"];
+}
+
+- (NSToolbarItem *)toolbar:(NSToolbar *)toolbar
+     itemForItemIdentifier:(NSString *)identifier
+ willBeInsertedIntoToolbar:(BOOL)flag
+{
+  if ([identifier isEqual: @"ShowAllItem"])
+    {
+      return showAllItem;
+    }
+  return nil;
 }
 
 @end
