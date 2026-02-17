@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <stdint.h>
 
 struct ModeInfo {
   uint32_t width{};

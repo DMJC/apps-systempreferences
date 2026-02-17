@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <regex>
 #include <sstream>
 #include <unordered_map>
 
@@ -31,12 +32,41 @@ public:
         line.erase(0, line.find_first_not_of(" \t"));
         bool current = false;
         if (!line.empty() && line[0]=='*') { current=true; line.erase(0,1); }
-        unsigned w=0,h=0; double hz=0.0;
-        if (sscanf(line.c_str(), "%ux%u@%lf", &w,&h,&hz)==3) {
-          ModeInfo mi; mi.width=w; mi.height=h; mi.refresh_mHz=(uint32_t)(hz*1000.0+0.5);
-          std::ostringstream id; id<<w<<"x"<<h<<"@"<<mi.refresh_mHz; mi.id=id.str();
-          mi.current=current; if (current) cur.currentModeId=mi.id;
-          cur.modes.push_back(mi);
+
+        // Support multiple wlr-randr output formats, including:
+        // - "1920x1080@60.000000Hz"
+        // - "1920x1080 @ 60.000 Hz"
+        // - "1920x1080 px, 60.000000 Hz (preferred, current)"
+        // - "Current mode: 1920x1080 @ 60.000 Hz"
+        static const std::regex modePattern(
+          R"((\d+)x(\d+)(?:\s*px)?\s*(?:@|,)?\s*(\d+(?:\.\d+)?)\s*Hz?)",
+          std::regex::icase);
+        std::smatch m;
+        if (std::regex_search(line, m, modePattern)) {
+          unsigned w = (unsigned)std::strtoul(m[1].str().c_str(), nullptr, 10);
+          unsigned h = (unsigned)std::strtoul(m[2].str().c_str(), nullptr, 10);
+          double hz = std::strtod(m[3].str().c_str(), nullptr);
+
+          if (!current && line.find("current") != std::string::npos) current = true;
+
+          ModeInfo mi;
+          mi.width = w;
+          mi.height = h;
+          mi.refresh_mHz = (uint32_t)(hz * 1000.0 + 0.5);
+          std::ostringstream id; id << w << "x" << h << "@" << mi.refresh_mHz; mi.id = id.str();
+          mi.current = current;
+          if (current) cur.currentModeId = mi.id;
+          bool seen = false;
+          for (const auto& existing : cur.modes) {
+            if (existing.id == mi.id) { seen = true; break; }
+          }
+          if (!seen) {
+            cur.modes.push_back(mi);
+          } else if (current) {
+            for (auto& existing : cur.modes) {
+              if (existing.id == mi.id) { existing.current = true; break; }
+            }
+          }
         }
       }
     }

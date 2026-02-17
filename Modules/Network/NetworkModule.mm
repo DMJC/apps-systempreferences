@@ -27,65 +27,77 @@ static const CGFloat kConnectionRowHeight = 40.0;
 #pragma mark - Data
 
 - (NSArray *)fetchConnectionTypes {
-    NSMutableSet *types = [NSMutableSet set];
-    NSMutableSet *activeTypes = [NSMutableSet set];
+    NSMutableArray *connections = [NSMutableArray array];
     @try {
         NSTask *task = [[NSTask alloc] init];
         [task setLaunchPath:@"/usr/bin/env"];
-        [task setArguments:@[@"nmcli", @"-t", @"-f", @"TYPE", @"connection", @"show"]];
+        [task setArguments:@[@"nmcli", @"-t", @"-f", @"DEVICE,TYPE,STATE", @"device", @"status"]];
         NSPipe *pipe = [NSPipe pipe];
         [task setStandardOutput:pipe];
         [task launch];
         [task waitUntilExit];
 
         NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
-        NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        NSString *output = [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] autorelease];
         NSArray *lines = [output componentsSeparatedByString:@"\n"];
         for (NSString *line in lines) {
-            if ([line length] > 0) {
-                [types addObject:line];
+            if ([line length] == 0) {
+                continue;
             }
-        }
+            NSArray *parts = [line componentsSeparatedByString:@":"];
+            if ([parts count] < 3) {
+                continue;
+            }
 
-        NSTask *activeTask = [[NSTask alloc] init];
-        [activeTask setLaunchPath:@"/usr/bin/env"];
-        [activeTask setArguments:@[@"nmcli", @"-t", @"-f", @"TYPE", @"connection", @"show", @"--active"]];
-        NSPipe *activePipe = [NSPipe pipe];
-        [activeTask setStandardOutput:activePipe];
-        [activeTask launch];
-        [activeTask waitUntilExit];
-        NSData *aData = [[activePipe fileHandleForReading] readDataToEndOfFile];
-        NSString *aOutput = [[NSString alloc] initWithData:aData encoding:NSUTF8StringEncoding];
-        NSArray *aLines = [aOutput componentsSeparatedByString:@"\n"];
-        for (NSString *line in aLines) {
-            if ([line length] > 0) {
-                [activeTypes addObject:line];
+            NSString *device = [parts objectAtIndex:0];
+            NSString *type = [parts objectAtIndex:1];
+            NSString *state = [[parts subarrayWithRange:NSMakeRange(2, [parts count] - 2)] componentsJoinedByString:@":"];
+            if ([device length] == 0 || [device isEqualToString:@"--"]) {
+                continue;
             }
+
+            BOOL connected = ([state rangeOfString:@"connected" options:NSCaseInsensitiveSearch].location != NSNotFound);
+            NSImage *icon = [self iconForConnectionType:type];
+            if (!icon) {
+                NSString *path = [[NSBundle bundleForClass:[self class]] pathForResource:@"Network" ofType:@"tiff"];
+                icon = [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
+            }
+
+            NSString *displayName = [NSString stringWithFormat:@"%@ (%@)", device, type];
+            [connections addObject:@{
+                @"name": displayName,
+                @"device": device,
+                @"type": type,
+                @"icon": icon,
+                @"connected": @(connected)
+            }];
         }
     }
     @catch (NSException *exception) {
         // ignore and fall back to defaults
     }
 
-    if ([types count] == 0) {
-        [types addObjectsFromArray:@[@"ethernet", @"wifi", @"bond", @"ip-tunnel",
-                                     @"macsec", @"team", @"loopback", @"wifi-p2p", @"vlan", @"wireguard",
-                                     @"bridge", @"bluetooth", @"dsl", @"infiniband",
-                                     @"gsm", @"vpn"]];
+    if ([connections count] == 0) {
+        NSArray *fallback = @[@"ethernet", @"wifi", @"bond", @"ip-tunnel",
+                              @"macsec", @"team", @"loopback", @"wifi-p2p", @"vlan", @"wireguard",
+                              @"bridge", @"bluetooth", @"dsl", @"infiniband",
+                              @"gsm", @"vpn"];
+        for (NSString *type in fallback) {
+            NSImage *icon = [self iconForConnectionType:type];
+            if (!icon) {
+                NSString *path = [[NSBundle bundleForClass:[self class]] pathForResource:@"Network" ofType:@"tiff"];
+                icon = [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
+            }
+            [connections addObject:@{
+                @"name": type,
+                @"type": type,
+                @"icon": icon,
+                @"connected": @NO
+            }];
+        }
     }
 
-    NSMutableArray *result = [NSMutableArray array];
-    for (NSString *type in types) {
-        NSImage *icon = [self iconForConnectionType:type];
-        if (!icon) {
-            NSString *path = [[NSBundle bundleForClass:[self class]] pathForResource:@"Network" ofType:@"tiff"];
-            icon = [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
-        }
-        BOOL connected = [activeTypes containsObject:type];
-	NSLog(@"%@", type);
-        [result addObject:@{ @"name": type, @"icon": icon, @"connected": @(connected) }];
-    }
-    return result;
+    return connections;
 }
 
 - (void)reloadConnectionList {
@@ -146,31 +158,13 @@ static const CGFloat kConnectionRowHeight = 40.0;
             mask & 0xFF];
 }
 
-- (NSDictionary *)detailsForConnectionType:(NSString *)type {
+- (NSDictionary *)detailsForConnection:(NSDictionary *)connection {
     NSMutableDictionary *info = [NSMutableDictionary dictionary];
-    @try {
-        NSTask *task = [[NSTask alloc] init];
-        [task setLaunchPath:@"/usr/bin/env"];
-        [task setArguments:@[@"nmcli", @"-t", @"-f", @"DEVICE,TYPE", @"connection", @"show", @"--active"]];
-        NSPipe *pipe = [NSPipe pipe];
-        [task setStandardOutput:pipe];
-        [task launch];
-        [task waitUntilExit];
-        NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
-        NSString *output = [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] autorelease];
-        NSArray *lines = [output componentsSeparatedByString:@"\n"];
-        NSString *device = nil;
-        for (NSString *line in lines) {
-            NSArray *parts = [line componentsSeparatedByString:@":"];
-            if ([parts count] == 2) {
-                if ([[parts objectAtIndex:1] isEqualToString:type]) {
-                    device = [parts objectAtIndex:0];
-                    break;
-                }
-            }
-        }
+    NSString *device = [connection objectForKey:@"device"];
+    BOOL connectedFromList = [[connection objectForKey:@"connected"] boolValue];
 
-        if (device) {
+    @try {
+        if ([device length] > 0) {
             NSTask *detail = [[NSTask alloc] init];
             [detail setLaunchPath:@"/usr/bin/env"];
             [detail setArguments:@[@"nmcli", @"-t", @"-f",
@@ -183,16 +177,16 @@ static const CGFloat kConnectionRowHeight = 40.0;
             NSData *ddata = [[dpipe fileHandleForReading] readDataToEndOfFile];
             NSString *dout = [[[NSString alloc] initWithData:ddata encoding:NSUTF8StringEncoding] autorelease];
             NSArray *dl = [dout componentsSeparatedByString:@"\n"];
-            BOOL connected = NO;
+            BOOL connected = connectedFromList;
             for (NSString *l in dl) {
                 if ([l hasPrefix:@"GENERAL.STATE:"]) {
-                    connected = ([l rangeOfString:@"connected"].location != NSNotFound);
+                    connected = ([l rangeOfString:@"connected" options:NSCaseInsensitiveSearch].location != NSNotFound);
                 } else if ([l hasPrefix:@"IP4.ADDRESS"]) {
                     NSString *val = [[l componentsSeparatedByString:@":"] lastObject];
                     NSRange slash = [val rangeOfString:@"/"];
                     if (slash.location != NSNotFound) {
                         NSString *ip = [val substringToIndex:slash.location];
-                        NSInteger prefix = [[val substringFromIndex:slash.location+1] integerValue];
+                        NSInteger prefix = [[val substringFromIndex:slash.location + 1] integerValue];
                         [info setObject:ip forKey:@"ip"];
                         [info setObject:[self maskFromPrefix:prefix] forKey:@"mask"];
                     } else {
@@ -249,12 +243,16 @@ static const CGFloat kConnectionRowHeight = 40.0;
                     break;
                 }
             }
-        } else {
-            [info setObject:@"Disconnected" forKey:@"status"];
+        }
+
+        if (![info objectForKey:@"status"]) {
+            [info setObject:(connectedFromList ? @"Connected" : @"Disconnected") forKey:@"status"];
         }
     }
     @catch (NSException *exception) {
-        // ignore, return whatever we have
+        if (![info objectForKey:@"status"]) {
+            [info setObject:(connectedFromList ? @"Connected" : @"Disconnected") forKey:@"status"];
+        }
     }
 
     return info;
@@ -435,8 +433,8 @@ static const CGFloat kConnectionRowHeight = 40.0;
     if (row < 0 || row >= [self.connectionTypes count]) {
         return;
     }
-    NSString *type = [[self.connectionTypes objectAtIndex:row] objectForKey:@"name"];
-    NSDictionary *details = [self detailsForConnectionType:type];
+    NSDictionary *selectedConnection = [self.connectionTypes objectAtIndex:row];
+    NSDictionary *details = [self detailsForConnection:selectedConnection];
     self.statusField.stringValue = [details objectForKey:@"status"] ?: @"";
     self.ipField.stringValue = [details objectForKey:@"ip"] ?: @"";
     self.maskField.stringValue = [details objectForKey:@"mask"] ?: @"";
