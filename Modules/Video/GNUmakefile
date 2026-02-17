@@ -6,6 +6,7 @@ VideoModule_PRINCIPAL_CLASS = VideoModule
 
 # Use OBJCXX for Objective-C++
 VideoModule_OBJCC_FILES = VideoModule.mm
+VideoModule_CC_FILES = X11Backend.cpp WaylandBackend.cpp
 VideoModule_RESOURCE_FILES = Video.tiff \
 Resources/English.lproj
 
