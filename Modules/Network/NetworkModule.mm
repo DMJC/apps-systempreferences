@@ -108,6 +108,11 @@ static const CGFloat kConnectionRowHeight = 40.0;
         tableHeight = 300;
     [self.connectionListView setFrame:NSMakeRect(0, 0, 160, tableHeight)];
     [self.connectionListView reloadData];
+    if ([self.connectionTypes count] > 0) {
+        [self.connectionListView selectRowIndexes:[NSIndexSet indexSetWithIndex:0]
+                             byExtendingSelection:NO];
+        [self tableViewSelectionDidChange:nil];
+    }
 }
 
 - (NSImage *)iconForConnectionType:(NSString *)type {
@@ -345,9 +350,6 @@ static const CGFloat kConnectionRowHeight = 40.0;
     self.searchField = makeValueField(startY - 210);
     [self updateFieldEditability];
 
-    makeLabel(@"Router:", startY - 240);
-    self.routerField = makeValueField(startY - 240);
-
 }
 
 #pragma mark - Editing
@@ -394,36 +396,47 @@ static const CGFloat kConnectionRowHeight = 40.0;
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row {
     NSDictionary *info = [self.connectionTypes objectAtIndex:row];
     CGFloat width = [tableColumn width];
+    static NSInteger kNameFieldTag = 101;
+    static NSInteger kDotViewTag = 102;
+    static NSInteger kStatusFieldTag = 103;
 
-    NSTableCellView *cell = [[[NSTableCellView alloc] initWithFrame:NSMakeRect(0, 0, width, kConnectionRowHeight)] autorelease];
+    NSTableCellView *cell = [tableView makeViewWithIdentifier:@"ConnectionCell" owner:self];
+    if (cell == nil) {
+        cell = [[[NSTableCellView alloc] initWithFrame:NSMakeRect(0, 0, width, kConnectionRowHeight)] autorelease];
+        [cell setIdentifier:@"ConnectionCell"];
 
-    NSImageView *imageView = [[[NSImageView alloc] initWithFrame:NSMakeRect(2, 8, 24, 24)] autorelease];
-    [imageView setImageScaling:NSImageScaleProportionallyDown];
-    [imageView setImage:[info objectForKey:@"icon"]];
-    cell.imageView = imageView;
-    [cell addSubview:imageView];
+        NSImageView *imageView = [[[NSImageView alloc] initWithFrame:NSMakeRect(2, 8, 24, 24)] autorelease];
+        [imageView setImageScaling:NSImageScaleProportionallyDown];
+        cell.imageView = imageView;
+        [cell addSubview:imageView];
 
-    NSTextField *nameField = [[[NSTextField alloc] initWithFrame:NSMakeRect(32, 22, width - 34, 16)] autorelease];
-    [nameField setBezeled:NO];
-    [nameField setBordered:NO];
-    [nameField setEditable:NO];
-    [nameField setDrawsBackground:NO];
-    [nameField setStringValue:[info objectForKey:@"name"]];
-    cell.textField = nameField;
-    [cell addSubview:nameField];
+        NSTextField *nameField = [[[NSTextField alloc] initWithFrame:NSMakeRect(32, 22, width - 34, 16)] autorelease];
+        [nameField setTag:kNameFieldTag];
+        [nameField setBezeled:NO];
+        [nameField setBordered:NO];
+        [nameField setEditable:NO];
+        [nameField setDrawsBackground:NO];
+        cell.textField = nameField;
+        [cell addSubview:nameField];
+
+        NSImageView *dotView = [[[NSImageView alloc] initWithFrame:NSMakeRect(32, 6, 8, 8)] autorelease];
+        [dotView setTag:kDotViewTag];
+        [cell addSubview:dotView];
+
+        NSTextField *statusField = [[[NSTextField alloc] initWithFrame:NSMakeRect(44, 2, width - 46, 16)] autorelease];
+        [statusField setTag:kStatusFieldTag];
+        [statusField setBordered:NO];
+        [statusField setBezeled:NO];
+        [statusField setEditable:NO];
+        [statusField setDrawsBackground:NO];
+        [cell addSubview:statusField];
+    }
 
     BOOL connected = [[info objectForKey:@"connected"] boolValue];
-    NSImageView *dotView = [[[NSImageView alloc] initWithFrame:NSMakeRect(32, 6, 8, 8)] autorelease];
-    [dotView setImage:[self dotImageForState:connected]];
-    [cell addSubview:dotView];
-
-    NSTextField *statusField = [[[NSTextField alloc] initWithFrame:NSMakeRect(44, 2, width - 46, 16)] autorelease];
-    [statusField setBordered:NO];
-    [statusField setBezeled:NO];
-    [statusField setEditable:NO];
-    [statusField setBackgroundColor:[NSColor clearColor]];
-    [statusField setStringValue:(connected ? @"Connected" : @"Disconnected")];
-    [cell addSubview:statusField];
+    [cell.imageView setImage:[info objectForKey:@"icon"]];
+    [[cell viewWithTag:kNameFieldTag] setStringValue:[info objectForKey:@"name"] ?: @""];
+    [(NSImageView *)[cell viewWithTag:kDotViewTag] setImage:[self dotImageForState:connected]];
+    [[cell viewWithTag:kStatusFieldTag] setStringValue:(connected ? @"Connected" : @"Disconnected")];
 
     return cell;
 }
