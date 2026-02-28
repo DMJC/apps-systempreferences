@@ -26,19 +26,64 @@ static const CGFloat kConnectionRowHeight = 40.0;
 
 #pragma mark - Data
 
+
+- (NSString *)outputForCommand:(NSString *)launchPath arguments:(NSArray *)arguments {
+    NSTask *task = [[[NSTask alloc] init] autorelease];
+    [task setLaunchPath:launchPath];
+    [task setArguments:arguments];
+
+    NSPipe *outPipe = [NSPipe pipe];
+    NSPipe *errPipe = [NSPipe pipe];
+    [task setStandardOutput:outPipe];
+    [task setStandardError:errPipe];
+
+    [task launch];
+    [task waitUntilExit];
+
+    NSData *data = [[outPipe fileHandleForReading] readDataToEndOfFile];
+    if ([data length] == 0) {
+        return @"";
+    }
+
+    NSString *output = [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] autorelease];
+    return output ?: @"";
+}
+
+- (NSString *)ipv4MethodForDevice:(NSString *)device {
+    if ([device length] == 0) {
+        return nil;
+    }
+
+    NSString *connectionOutput = [self outputForCommand:@"/usr/bin/env"
+                                              arguments:@[@"nmcli", @"-t", @"-f", @"GENERAL.CONNECTION", @"device", @"show", device]];
+    NSString *connectionName = nil;
+    NSArray *connectionLines = [connectionOutput componentsSeparatedByString:@"\n"];
+    for (NSString *line in connectionLines) {
+        if ([line hasPrefix:@"GENERAL.CONNECTION:"]) {
+            connectionName = [[line componentsSeparatedByString:@":"] lastObject];
+            break;
+        }
+    }
+
+    if ([connectionName length] == 0 || [connectionName isEqualToString:@"--"]) {
+        return nil;
+    }
+
+    NSString *methodOutput = [self outputForCommand:@"/usr/bin/env"
+                                          arguments:@[@"nmcli", @"-g", @"ipv4.method", @"connection", @"show", connectionName]];
+    NSString *method = [[methodOutput stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] lowercaseString];
+    if ([method length] == 0) {
+        return nil;
+    }
+
+    return method;
+}
+
 - (NSArray *)fetchConnectionTypes {
     NSMutableArray *connections = [NSMutableArray array];
     @try {
-        NSTask *task = [[NSTask alloc] init];
-        [task setLaunchPath:@"/usr/bin/env"];
-        [task setArguments:@[@"nmcli", @"-t", @"-f", @"DEVICE,TYPE,STATE", @"device", @"status"]];
-        NSPipe *pipe = [NSPipe pipe];
-        [task setStandardOutput:pipe];
-        [task launch];
-        [task waitUntilExit];
-
-        NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
-        NSString *output = [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] autorelease];
+        NSString *output = [self outputForCommand:@"/usr/bin/env"
+                                       arguments:@[@"nmcli", @"-t", @"-f", @"DEVICE,TYPE,STATE", @"device", @"status"]];
         NSArray *lines = [output componentsSeparatedByString:@"\n"];
         for (NSString *line in lines) {
             if ([line length] == 0) {
@@ -58,10 +103,6 @@ static const CGFloat kConnectionRowHeight = 40.0;
 
             BOOL connected = ([state rangeOfString:@"connected" options:NSCaseInsensitiveSearch].location != NSNotFound);
             NSImage *icon = [self iconForConnectionType:type];
-            if (!icon) {
-                NSString *path = [[NSBundle bundleForClass:[self class]] pathForResource:@"Network" ofType:@"tiff"];
-                icon = [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
-            }
 
             NSString *displayName = [NSString stringWithFormat:@"%@ (%@)", device, type];
             [connections addObject:@{
@@ -84,10 +125,6 @@ static const CGFloat kConnectionRowHeight = 40.0;
                               @"gsm", @"vpn"];
         for (NSString *type in fallback) {
             NSImage *icon = [self iconForConnectionType:type];
-            if (!icon) {
-                NSString *path = [[NSBundle bundleForClass:[self class]] pathForResource:@"Network" ofType:@"tiff"];
-                icon = [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
-            }
             [connections addObject:@{
                 @"name": type,
                 @"type": type,
@@ -108,24 +145,43 @@ static const CGFloat kConnectionRowHeight = 40.0;
         tableHeight = 300;
     [self.connectionListView setFrame:NSMakeRect(0, 0, 160, tableHeight)];
     [self.connectionListView reloadData];
+    if ([self.connectionTypes count] > 0) {
+        [self.connectionListView selectRowIndexes:[NSIndexSet indexSetWithIndex:0]
+                             byExtendingSelection:NO];
+        [self tableViewSelectionDidChange:nil];
+    }
 }
 
 - (NSImage *)iconForConnectionType:(NSString *)type {
-    NSString *iconName = nil;
+    NSImage *icon = [[[NSImage alloc] initWithSize:NSMakeSize(24, 24)] autorelease];
+    [icon lockFocus];
+
+    [[NSColor colorWithDeviceWhite:0.95 alpha:1.0] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect:NSMakeRect(1, 1, 22, 22) xRadius:4 yRadius:4] fill];
+
+    NSString *symbol = @"N";
     if ([type caseInsensitiveCompare:@"ethernet"] == NSOrderedSame) {
-        iconName = @"Ethernet";
+        symbol = @"E";
+    } else if ([type caseInsensitiveCompare:@"wifi"] == NSOrderedSame ||
+               [type caseInsensitiveCompare:@"wireless"] == NSOrderedSame) {
+        symbol = @"W";
     } else if ([type caseInsensitiveCompare:@"bluetooth"] == NSOrderedSame) {
-        iconName = @"bluetooth";
-    } else if ([type caseInsensitiveCompare:@"wifi"] == NSOrderedSame) {
-	iconName = @"wireless";
-    } else if ([type caseInsensitiveCompare:@"wireless"] == NSOrderedSame) {
-	iconName = @"wireless";
-    } else {
-        iconName = @"Network";
+        symbol = @"B";
     }
 
-    NSString *path = [[NSBundle bundleForClass:[self class]] pathForResource:iconName ofType:@"tiff"];
-    return [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
+    NSDictionary *attrs = @{
+        NSFontAttributeName: [NSFont boldSystemFontOfSize:12],
+        NSForegroundColorAttributeName: [NSColor darkGrayColor]
+    };
+    NSSize textSize = [symbol sizeWithAttributes:attrs];
+    NSRect textRect = NSMakeRect((24 - textSize.width) / 2.0,
+                                 (24 - textSize.height) / 2.0,
+                                 textSize.width,
+                                 textSize.height);
+    [symbol drawInRect:textRect withAttributes:attrs];
+
+    [icon unlockFocus];
+    return icon;
 }
 
 - (NSImage *)dotImageForState:(BOOL)connected {
@@ -165,17 +221,10 @@ static const CGFloat kConnectionRowHeight = 40.0;
 
     @try {
         if ([device length] > 0) {
-            NSTask *detail = [[NSTask alloc] init];
-            [detail setLaunchPath:@"/usr/bin/env"];
-            [detail setArguments:@[@"nmcli", @"-t", @"-f",
-                                   @"GENERAL.STATE,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS,IP4.DOMAIN",
-                                   @"device", @"show", device]];
-            NSPipe *dpipe = [NSPipe pipe];
-            [detail setStandardOutput:dpipe];
-            [detail launch];
-            [detail waitUntilExit];
-            NSData *ddata = [[dpipe fileHandleForReading] readDataToEndOfFile];
-            NSString *dout = [[[NSString alloc] initWithData:ddata encoding:NSUTF8StringEncoding] autorelease];
+            NSString *dout = [self outputForCommand:@"/usr/bin/env"
+                                          arguments:@[@"nmcli", @"-t", @"-f",
+                                                      @"GENERAL.STATE,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS,IP4.DOMAIN",
+                                                      @"device", @"show", device]];
             NSArray *dl = [dout componentsSeparatedByString:@"\n"];
             BOOL connected = connectedFromList;
             for (NSString *l in dl) {
@@ -215,32 +264,14 @@ static const CGFloat kConnectionRowHeight = 40.0;
                 }
             }
             [info setObject:(connected ? @"Connected" : @"Disconnected") forKey:@"status"];
-
-            NSTask *methodTask = [[NSTask alloc] init];
-            [methodTask setLaunchPath:@"/usr/bin/env"];
-            [methodTask setArguments:@[@"nmcli", @"-t", @"-f",
-                                       @"DEVICE,IP4.METHOD,IP4.ADDRESS",
-                                       @"connection", @"show", @"--active"]];
-            NSPipe *mpipe = [NSPipe pipe];
-            [methodTask setStandardOutput:mpipe];
-            [methodTask launch];
-            [methodTask waitUntilExit];
-            NSData *mdata = [[mpipe fileHandleForReading] readDataToEndOfFile];
-            NSString *mout = [[[NSString alloc] initWithData:mdata encoding:NSUTF8StringEncoding] autorelease];
-            NSArray *mlines = [mout componentsSeparatedByString:@"\n"];
-            for (NSString *ml in mlines) {
-                NSArray *mparts = [ml componentsSeparatedByString:@":"];
-                if ([mparts count] >= 2 && [[mparts objectAtIndex:0] isEqualToString:device]) {
-                    NSString *method = [mparts objectAtIndex:1];
-                    NSString *addr = ([mparts count] > 2) ? [mparts objectAtIndex:2] : @"";
-                    if ([method isEqualToString:@"manual"]) {
-                        [info setObject:@"manual" forKey:@"method"];
-                    } else if ([addr length] > 0) {
-                        [info setObject:@"auto-manual" forKey:@"method"];
-                    } else {
-                        [info setObject:@"auto" forKey:@"method"];
-                    }
-                    break;
+            NSString *method = [self ipv4MethodForDevice:device];
+            if ([method isEqualToString:@"manual"]) {
+                [info setObject:@"manual" forKey:@"method"];
+            } else if ([method hasPrefix:@"auto"]) {
+                if ([[info objectForKey:@"ip"] length] > 0) {
+                    [info setObject:@"auto-manual" forKey:@"method"];
+                } else {
+                    [info setObject:@"auto" forKey:@"method"];
                 }
             }
         }
@@ -345,9 +376,6 @@ static const CGFloat kConnectionRowHeight = 40.0;
     self.searchField = makeValueField(startY - 210);
     [self updateFieldEditability];
 
-    makeLabel(@"Router:", startY - 240);
-    self.routerField = makeValueField(startY - 240);
-
 }
 
 #pragma mark - Editing
@@ -394,36 +422,47 @@ static const CGFloat kConnectionRowHeight = 40.0;
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row {
     NSDictionary *info = [self.connectionTypes objectAtIndex:row];
     CGFloat width = [tableColumn width];
+    static NSInteger kNameFieldTag = 101;
+    static NSInteger kDotViewTag = 102;
+    static NSInteger kStatusFieldTag = 103;
 
-    NSTableCellView *cell = [[[NSTableCellView alloc] initWithFrame:NSMakeRect(0, 0, width, kConnectionRowHeight)] autorelease];
+    NSTableCellView *cell = [tableView makeViewWithIdentifier:@"ConnectionCell" owner:self];
+    if (cell == nil) {
+        cell = [[[NSTableCellView alloc] initWithFrame:NSMakeRect(0, 0, width, kConnectionRowHeight)] autorelease];
+        [cell setIdentifier:@"ConnectionCell"];
 
-    NSImageView *imageView = [[[NSImageView alloc] initWithFrame:NSMakeRect(2, 8, 24, 24)] autorelease];
-    [imageView setImageScaling:NSImageScaleProportionallyDown];
-    [imageView setImage:[info objectForKey:@"icon"]];
-    cell.imageView = imageView;
-    [cell addSubview:imageView];
+        NSImageView *imageView = [[[NSImageView alloc] initWithFrame:NSMakeRect(2, 8, 24, 24)] autorelease];
+        [imageView setImageScaling:NSImageScaleProportionallyDown];
+        cell.imageView = imageView;
+        [cell addSubview:imageView];
 
-    NSTextField *nameField = [[[NSTextField alloc] initWithFrame:NSMakeRect(32, 22, width - 34, 16)] autorelease];
-    [nameField setBezeled:NO];
-    [nameField setBordered:NO];
-    [nameField setEditable:NO];
-    [nameField setDrawsBackground:NO];
-    [nameField setStringValue:[info objectForKey:@"name"]];
-    cell.textField = nameField;
-    [cell addSubview:nameField];
+        NSTextField *nameField = [[[NSTextField alloc] initWithFrame:NSMakeRect(32, 22, width - 34, 16)] autorelease];
+        [nameField setTag:kNameFieldTag];
+        [nameField setBezeled:NO];
+        [nameField setBordered:NO];
+        [nameField setEditable:NO];
+        [nameField setDrawsBackground:NO];
+        cell.textField = nameField;
+        [cell addSubview:nameField];
+
+        NSImageView *dotView = [[[NSImageView alloc] initWithFrame:NSMakeRect(32, 6, 8, 8)] autorelease];
+        [dotView setTag:kDotViewTag];
+        [cell addSubview:dotView];
+
+        NSTextField *statusField = [[[NSTextField alloc] initWithFrame:NSMakeRect(44, 2, width - 46, 16)] autorelease];
+        [statusField setTag:kStatusFieldTag];
+        [statusField setBordered:NO];
+        [statusField setBezeled:NO];
+        [statusField setEditable:NO];
+        [statusField setDrawsBackground:NO];
+        [cell addSubview:statusField];
+    }
 
     BOOL connected = [[info objectForKey:@"connected"] boolValue];
-    NSImageView *dotView = [[[NSImageView alloc] initWithFrame:NSMakeRect(32, 6, 8, 8)] autorelease];
-    [dotView setImage:[self dotImageForState:connected]];
-    [cell addSubview:dotView];
-
-    NSTextField *statusField = [[[NSTextField alloc] initWithFrame:NSMakeRect(44, 2, width - 46, 16)] autorelease];
-    [statusField setBordered:NO];
-    [statusField setBezeled:NO];
-    [statusField setEditable:NO];
-    [statusField setBackgroundColor:[NSColor clearColor]];
-    [statusField setStringValue:(connected ? @"Connected" : @"Disconnected")];
-    [cell addSubview:statusField];
+    [cell.imageView setImage:[info objectForKey:@"icon"]];
+    [[cell viewWithTag:kNameFieldTag] setStringValue:[info objectForKey:@"name"] ?: @""];
+    [(NSImageView *)[cell viewWithTag:kDotViewTag] setImage:[self dotImageForState:connected]];
+    [[cell viewWithTag:kStatusFieldTag] setStringValue:(connected ? @"Connected" : @"Disconnected")];
 
     return cell;
 }
