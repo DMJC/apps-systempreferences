@@ -5,16 +5,16 @@
 #import "PreferencePanes.h"
 
 @interface NetworkModule : NSPreferencePane <NSTableViewDelegate, NSTableViewDataSource>
-@property (retain) NSTableView *connectionListView;
-@property (retain) NSArray *connectionTypes;
-@property (retain) NSButton *addButton;
-@property (retain) NSButton *removeButton;
-@property (retain) NSTextField *statusField;
-@property (retain) NSTextField *ipField;
-@property (retain) NSTextField *maskField;
-@property (retain) NSTextField *routerField;
-@property (retain) NSTextField *dnsField;
-@property (retain) NSTextField *searchField;
-@property (retain) NSPopUpButton *methodPopup;
+@property (nonatomic, retain) NSArray<NSDictionary *> *connectionTypes;
+@property (nonatomic, retain) NSTableView *connectionListView;
+@property (nonatomic, retain) NSButton *addButton;
+@property (nonatomic, retain) NSButton *removeButton;
+@property (nonatomic, retain) NSTextField *statusField;
+@property (nonatomic, retain) NSTextField *ipField;
+@property (nonatomic, retain) NSTextField *maskField;
+@property (nonatomic, retain) NSTextField *routerField;
+@property (nonatomic, retain) NSTextField *dnsField;
+@property (nonatomic, retain) NSTextField *searchField;
+@property (nonatomic, retain) NSPopUpButton *methodPopup;
 @end
 #endif //NETWORKMODULE_H

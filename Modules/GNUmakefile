@@ -4,6 +4,7 @@ include $(GNUSTEP_MAKEFILES)/common.make
 
 SUBPROJECTS = \
 	Audio \
+	Bluetooth \
 	Video \
 	Network \
 	Power \
