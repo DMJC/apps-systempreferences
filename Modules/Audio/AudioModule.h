@@ -19,5 +19,6 @@
 @property (nonatomic, strong) NSMutableArray<NSNumber *> *outputDeviceIndexes;
 @property (nonatomic, strong) NSButton *outputMuteButton;
 @property (nonatomic, strong) NSButton *inputMuteButton;
+@property (nonatomic, strong) NSButton *showVolumeInMenuBarButton;
 @end
 #endif //AUDIOMODULE_H

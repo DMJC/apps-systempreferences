@@ -16,6 +16,7 @@ static const CGFloat kConnectionRowHeight = 40.0;
     [_dnsField release];
     [_searchField release];
     [_methodPopup release];
+    [_showWiFiInMenuBarButton release];
     [super dealloc];
 }
 
@@ -286,11 +287,30 @@ static const CGFloat kConnectionRowHeight = 40.0;
     [self.addButton setAction:@selector(addConnection:)];
     [contentView addSubview:self.addButton];
 
-    self.removeButton = [[[NSButton alloc] initWithFrame:NSMakeRect(60, 10, 20, 20)] autorelease];
+    self.removeButton = [[[NSButton alloc] initWithFrame:NSMakeRect(50, 10, 20, 20)] autorelease];
     [self.removeButton setTitle:@"-"];
     [self.removeButton setTarget:self];
     [self.removeButton setAction:@selector(removeConnection:)];
     [contentView addSubview:self.removeButton];
+
+    // Show Wi-Fi status in menu bar checkbox
+    self.showWiFiInMenuBarButton = [[[NSButton alloc]
+        initWithFrame:NSMakeRect(80, 10, 300, 20)] autorelease];
+    [self.showWiFiInMenuBarButton setTitle:@"Show Wi-Fi status in menu bar"];
+    [self.showWiFiInMenuBarButton setButtonType:NSSwitchButton];
+    [self.showWiFiInMenuBarButton setTarget:self];
+    [self.showWiFiInMenuBarButton setAction:@selector(showWiFiInMenuBarChanged:)];
+    [contentView addSubview:self.showWiFiInMenuBarButton];
+
+    // Restore saved state for the checkbox
+    {
+        NSString *prefsPath = [NSHomeDirectory() stringByAppendingPathComponent:
+                               @"GNUstep/Defaults/AmbrosiaMenuBar.plist"];
+        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:prefsPath];
+        BOOL show = [prefs[@"ShowWiFiMenu"] boolValue];
+        [self.showWiFiInMenuBarButton
+            setState:(show ? NSControlStateValueOn : NSControlStateValueOff)];
+    }
 
     CGFloat labelX = 200.0;
     CGFloat valueX = 300.0;
@@ -380,6 +400,25 @@ static const CGFloat kConnectionRowHeight = 40.0;
     if (row >= 0) {
         NSLog(@"Remove Connection at row %ld", (long)row);
     }
+}
+
+- (void)showWiFiInMenuBarChanged:(NSButton *)sender {
+    NSString *prefsDir  = [NSHomeDirectory() stringByAppendingPathComponent:@"GNUstep/Defaults"];
+    NSString *prefsPath = [prefsDir stringByAppendingPathComponent:@"AmbrosiaMenuBar.plist"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:prefsDir
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:nil];
+    NSMutableDictionary *prefs =
+        [NSMutableDictionary dictionaryWithContentsOfFile:prefsPath]
+        ?: [NSMutableDictionary dictionary];
+    prefs[@"ShowWiFiMenu"] = @(sender.state == NSControlStateValueOn);
+    [prefs writeToFile:prefsPath atomically:YES];
+    [[NSDistributedNotificationCenter defaultCenter]
+        postNotificationName:@"AmbrosiaMenuBarPrefsChanged"
+                      object:nil
+                    userInfo:nil
+          deliverImmediately:YES];
 }
 
 #pragma mark - TableView Data Source

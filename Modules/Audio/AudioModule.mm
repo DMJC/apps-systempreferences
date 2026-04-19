@@ -119,6 +119,24 @@
     [self.outputMuteButton setAction:@selector(outputMuteButtonPressed:)];
     [outputView addSubview:self.outputMuteButton];
 
+    // Show Volume in Menu Bar checkbox
+    self.showVolumeInMenuBarButton = [[NSButton alloc] initWithFrame:NSMakeRect(10, 3, width - 20, 20)];
+    [self.showVolumeInMenuBarButton setTitle:@"Show volume in menu bar"];
+    [self.showVolumeInMenuBarButton setButtonType:NSSwitchButton];
+    [self.showVolumeInMenuBarButton setTarget:self];
+    [self.showVolumeInMenuBarButton setAction:@selector(showVolumeInMenuBarChanged:)];
+    [outputView addSubview:self.showVolumeInMenuBarButton];
+
+    // Restore saved state for the checkbox
+    {
+        NSString *prefsPath = [NSHomeDirectory() stringByAppendingPathComponent:
+                               @"GNUstep/Defaults/AmbrosiaMenuBar.plist"];
+        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:prefsPath];
+        BOOL show = [prefs[@"ShowVolumeMenu"] boolValue];
+        [self.showVolumeInMenuBarButton
+            setState:(show ? NSControlStateValueOn : NSControlStateValueOff)];
+    }
+
     // Add Audio Input Tab
     NSTabViewItem *inputTab = [[NSTabViewItem alloc] initWithIdentifier:@"Input"];
     [inputTab setLabel:@"Input"];
@@ -234,6 +252,25 @@
         BOOL mute = (sender.state == NSControlStateValueOn);
         pa_context_set_source_mute_by_index(self.context, index, mute, NULL, NULL);
     }
+}
+
+- (void)showVolumeInMenuBarChanged:(NSButton *)sender {
+    NSString *prefsDir  = [NSHomeDirectory() stringByAppendingPathComponent:@"GNUstep/Defaults"];
+    NSString *prefsPath = [prefsDir stringByAppendingPathComponent:@"AmbrosiaMenuBar.plist"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:prefsDir
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:nil];
+    NSMutableDictionary *prefs =
+        [NSMutableDictionary dictionaryWithContentsOfFile:prefsPath]
+        ?: [NSMutableDictionary dictionary];
+    prefs[@"ShowVolumeMenu"] = @(sender.state == NSControlStateValueOn);
+    [prefs writeToFile:prefsPath atomically:YES];
+    [[NSDistributedNotificationCenter defaultCenter]
+        postNotificationName:@"AmbrosiaMenuBarPrefsChanged"
+                      object:nil
+                    userInfo:nil
+          deliverImmediately:YES];
 }
 
 - (void)outputMuteButtonPressed:(NSButton *)sender {

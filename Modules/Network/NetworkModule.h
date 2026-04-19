@@ -16,5 +16,6 @@
 @property (nonatomic, retain) NSTextField *dnsField;
 @property (nonatomic, retain) NSTextField *searchField;
 @property (nonatomic, retain) NSPopUpButton *methodPopup;
+@property (nonatomic, retain) NSButton *showWiFiInMenuBarButton;
 @end
 #endif //NETWORKMODULE_H
