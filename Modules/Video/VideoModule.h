@@ -7,18 +7,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface VideoModule : NSPreferencePane <NSTableViewDataSource, NSTableViewDelegate>
 
-// Outlets – wire them up in Gorm/Nib, or programmatically create in mainViewDidLoad
-@property (nonatomic, strong) IBOutlet NSTableView *deviceTableView;       // List of connected outputs
-@property (nonatomic, strong) IBOutlet NSTableView *outputDeviceTableView; // Modes for selected output
-@property (nonatomic, strong) IBOutlet NSTableView *scaleTableView;	   // Scale Table
-@property (nonatomic, strong) IBOutlet NSTableView *inputDeviceTableView;  // Details table
-@property (nonatomic, strong) IBOutlet NSButton    *ApplyButton;           // Apply button
-@property (nonatomic, strong) IBOutlet NSScrollView *scaleScrollView;
+// Resolution Settings tab outlets
+@property (nonatomic, strong) IBOutlet NSTableView *deviceTableView;
+@property (nonatomic, strong) IBOutlet NSTableView *outputDeviceTableView;
+@property (nonatomic, strong) IBOutlet NSTableView *inputDeviceTableView;
+@property (nonatomic, strong) IBOutlet NSButton    *ApplyButton;
+
 // SystemPreferences entry point
 - (void)mainViewDidLoad;
 
 // Actions
 - (IBAction)onApply:(id)sender;
+- (IBAction)onApplyLayout:(id)sender;
 
 @end
 

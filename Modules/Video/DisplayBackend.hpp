@@ -2,7 +2,6 @@
 #pragma once
 #include <string>
 #include <vector>
-#include <functional>
 #include <stdint.h>
 
 struct ModeInfo {
@@ -17,6 +16,7 @@ struct OutputInfo {
   std::string name;
   std::vector<ModeInfo> modes;
   std::string currentModeId;  // id of current mode
+  int x{0}, y{0};             // position on the virtual screen
 };
 
 class DisplayBackend {
@@ -27,9 +27,20 @@ public:
   virtual std::vector<OutputInfo> listOutputs() = 0;
 
   // Apply a mode to an output; return true if compositor accepted it
-  // (position/rotation untouched)
   virtual bool setMode(const std::string& outputName, const std::string& modeId) = 0;
 
   // Optional: revert to remembered original mode for this output
   virtual bool revert(const std::string& outputName) = 0;
+
+  // Move an output to a new position on the virtual screen
+  virtual bool setPosition(const std::string& outputName, int x, int y) { return false; }
+
+  // Apply all positions atomically (handles screen resize, ordering, etc.)
+  // placements: list of (outputName, (x, y))
+  virtual bool applyPositions(const std::vector<std::pair<std::string, std::pair<int,int>>>& placements) {
+    bool ok = true;
+    for (const auto& p : placements)
+      if (!setPosition(p.first, p.second.first, p.second.second)) ok = false;
+    return ok;
+  }
 };

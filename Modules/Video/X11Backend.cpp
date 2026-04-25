@@ -41,6 +41,8 @@ public:
 
       OutputInfo O;
       O.name.assign(oi->name, oi->name + oi->nameLen);
+      O.x = ci->x;
+      O.y = ci->y;
       originals_[O.name] = { oi->crtc, ci->mode, ci->x, ci->y, ci->rotation };
 
       for (int m=0;m<oi->nmode;m++) {
@@ -81,7 +83,6 @@ public:
       if (nm == name && oi->crtc) {
         XRRCrtcInfo* ci = XRRGetCrtcInfo(dpy_, res, oi->crtc);
         if (ci) { crtc=oi->crtc; ox=ci->x; oy=ci->y; rot=ci->rotation; XRRFreeCrtcInfo(ci); }
-        // parse RRMode id
         newMode = (RRMode)strtoull(modeId.c_str(), nullptr, 10);
         XRRFreeOutputInfo(oi);
         break;
@@ -109,9 +110,125 @@ public:
     XRRFreeScreenResources(res);
     return st == Success;
   }
+
+  bool setPosition(const std::string& name, int newX, int newY) override {
+    std::fprintf(stderr, "[X11Backend] setPosition %s -> %d,%d\n", name.c_str(), newX, newY);
+    if (!dpy_) return false;
+    XRRScreenResources* res = XRRGetScreenResourcesCurrent(dpy_, root_);
+    if (!res) return false;
+    bool ok = false;
+    for (int i = 0; i < res->noutput; i++) {
+      XRROutputInfo* oi = XRRGetOutputInfo(dpy_, res, res->outputs[i]);
+      if (!oi) continue;
+      std::string nm(oi->name, oi->name + oi->nameLen);
+      if (nm == name && oi->crtc) {
+        XRRCrtcInfo* ci = XRRGetCrtcInfo(dpy_, res, oi->crtc);
+        if (ci) {
+          Status st = XRRSetCrtcConfig(dpy_, res, oi->crtc, CurrentTime,
+                                        newX, newY, ci->mode, ci->rotation,
+                                        ci->outputs, ci->noutput);
+          ok = (st == Success);
+          XRRFreeCrtcInfo(ci);
+        }
+        XRRFreeOutputInfo(oi);
+        break;
+      }
+      XRRFreeOutputInfo(oi);
+    }
+    XSync(dpy_, False);
+    XRRFreeScreenResources(res);
+    return ok;
+  }
+
+  bool applyPositions(const std::vector<std::pair<std::string, std::pair<int,int>>>& placements) override {
+    if (!dpy_) return false;
+    XRRScreenResources* res = XRRGetScreenResourcesCurrent(dpy_, root_);
+    if (!res) return false;
+
+    // Build name->position lookup
+    std::unordered_map<std::string, std::pair<int,int>> posMap;
+    for (const auto& p : placements) posMap[p.first] = p.second;
+
+    // Calculate bounding box needed for the new layout
+    int newW = 0, newH = 0;
+    for (int i = 0; i < res->noutput; i++) {
+      XRROutputInfo* oi = XRRGetOutputInfo(dpy_, res, res->outputs[i]);
+      if (!oi) continue;
+      std::string nm(oi->name, oi->name + oi->nameLen);
+      if (oi->crtc) {
+        XRRCrtcInfo* ci = XRRGetCrtcInfo(dpy_, res, oi->crtc);
+        if (ci) {
+          int x = ci->x, y = ci->y;
+          if (posMap.count(nm)) { x = posMap.at(nm).first; y = posMap.at(nm).second; }
+          for (int j = 0; j < res->nmode; j++) {
+            if (res->modes[j].id == ci->mode) {
+              int right  = x + (int)res->modes[j].width;
+              int bottom = y + (int)res->modes[j].height;
+              if (right  > newW) newW = right;
+              if (bottom > newH) newH = bottom;
+              break;
+            }
+          }
+          XRRFreeCrtcInfo(ci);
+        }
+      }
+      XRRFreeOutputInfo(oi);
+    }
+
+    // Expand screen to cover the new layout before moving CRTCs
+    int curW = DisplayWidth(dpy_,  screen_);
+    int curH = DisplayHeight(dpy_, screen_);
+    if (newW > curW || newH > curH) {
+      int w = (newW > curW) ? newW : curW;
+      int h = (newH > curH) ? newH : curH;
+      XRRSetScreenSize(dpy_, root_, w, h,
+                       (int)(w * 25.4 / 96.0),
+                       (int)(h * 25.4 / 96.0));
+      XSync(dpy_, False);
+      XRRFreeScreenResources(res);
+      res = XRRGetScreenResourcesCurrent(dpy_, root_);
+      if (!res) return false;
+    }
+
+    // Move each CRTC that has a new position
+    bool allOk = true;
+    for (int i = 0; i < res->noutput; i++) {
+      XRROutputInfo* oi = XRRGetOutputInfo(dpy_, res, res->outputs[i]);
+      if (!oi) continue;
+      std::string nm(oi->name, oi->name + oi->nameLen);
+      if (oi->crtc && posMap.count(nm)) {
+        XRRCrtcInfo* ci = XRRGetCrtcInfo(dpy_, res, oi->crtc);
+        if (ci) {
+          int nx = posMap.at(nm).first;
+          int ny = posMap.at(nm).second;
+          Status st = XRRSetCrtcConfig(dpy_, res, oi->crtc, CurrentTime,
+                                        nx, ny, ci->mode, ci->rotation,
+                                        ci->outputs, ci->noutput);
+          if (st != Success) {
+            std::fprintf(stderr, "[X11Backend] applyPositions: failed to move %s\n", nm.c_str());
+            allOk = false;
+          }
+          XRRFreeCrtcInfo(ci);
+        }
+      }
+      XRRFreeOutputInfo(oi);
+    }
+
+    // Shrink screen to the actual bounding box if the layout got smaller
+    if (newW < curW || newH < curH) {
+      int w = (newW > 0) ? newW : curW;
+      int h = (newH > 0) ? newH : curH;
+      XRRSetScreenSize(dpy_, root_, w, h,
+                       (int)(w * 25.4 / 96.0),
+                       (int)(h * 25.4 / 96.0));
+    }
+
+    XSync(dpy_, False);
+    XRRFreeScreenResources(res);
+    return allOk;
+  }
 };
 
-// factory
 std::unique_ptr<DisplayBackend> MakeX11Backend() {
   std::fprintf(stderr, "[Factory] MakeX11Backend\n");
   return std::unique_ptr<DisplayBackend>(new X11Backend());

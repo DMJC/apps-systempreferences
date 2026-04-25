@@ -27,17 +27,22 @@ public:
       if (line[0] != ' ' && line[0] != '\t') {
         if (!cur.name.empty()) { outs.push_back(cur); cur = OutputInfo(); }
         std::istringstream iss(line);
-        iss >> cur.name; // first token is output name
+        iss >> cur.name;
       } else {
         line.erase(0, line.find_first_not_of(" \t"));
+
+        // Parse "Position: X,Y"
+        if (line.substr(0, 9) == "Position:") {
+          int px = 0, py = 0;
+          sscanf(line.c_str(), "Position: %d,%d", &px, &py);
+          cur.x = px; cur.y = py;
+          continue;
+        }
+
         bool current = false;
         if (!line.empty() && line[0]=='*') { current=true; line.erase(0,1); }
 
-        // Support multiple wlr-randr output formats, including:
-        // - "1920x1080@60.000000Hz"
-        // - "1920x1080 @ 60.000 Hz"
-        // - "1920x1080 px, 60.000000 Hz (preferred, current)"
-        // - "Current mode: 1920x1080 @ 60.000 Hz"
+        // Support multiple wlr-randr output formats
         static const std::regex modePattern(
           R"((\d+)x(\d+)(?:\s*px)?\s*(?:@|,)?\s*(\d+(?:\.\d+)?)\s*Hz?)",
           std::regex::icase);
@@ -91,6 +96,23 @@ public:
     auto it = originals_.find(name);
     if (it==originals_.end()) return false;
     return setMode(name, it->second);
+  }
+
+  bool setPosition(const std::string& name, int x, int y) override {
+    std::fprintf(stderr, "[WaylandBackend] setPosition %s -> %d,%d\n", name.c_str(), x, y);
+    std::ostringstream cmd;
+    cmd << "wlr-randr --output " << name << " --pos " << x << "," << y;
+    return std::system(cmd.str().c_str()) == 0;
+  }
+
+  bool applyPositions(const std::vector<std::pair<std::string, std::pair<int,int>>>& placements) override {
+    if (placements.empty()) return true;
+    std::ostringstream cmd;
+    cmd << "wlr-randr";
+    for (const auto& p : placements)
+      cmd << " --output " << p.first << " --pos " << p.second.first << "," << p.second.second;
+    std::fprintf(stderr, "[WaylandBackend] applyPositions: %s\n", cmd.str().c_str());
+    return std::system(cmd.str().c_str()) == 0;
   }
 };
 
